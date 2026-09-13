@@ -143,8 +143,13 @@ def home():
     return jsonify({"message": "Fraud Detection API is running (SQLite database use hocche). Try /accounts"})
 
 
+# init_db() ke module level e call kora hocche, jate 'python app.py' die
+# local e chalale, ebong 'gunicorn app:app' die deploy kore chalale -
+# dutokhetreই database toiri hoy. Age eta shudhu __main__ block e chilo,
+# tai gunicorn e run korle eta kokhono call hoto na.
+init_db()
+
 if __name__ == "__main__":
-    init_db()  # app start howar age database toiri/check kore neya hoy
     import os
     port = int(os.environ.get("PORT", 5000))  # Render/hosting service PORT env var use kore
     app.run(host="0.0.0.0", port=port, debug=False)
