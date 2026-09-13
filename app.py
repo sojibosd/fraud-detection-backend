@@ -120,6 +120,41 @@ def add_account():
     }), 201
 
 
+@app.route("/accounts/<account_id>", methods=["PUT"])
+def update_account(account_id):
+    """
+    Ekta existing account er fraud score update korar jonne.
+    Body te ei rokom JSON pathate hobe:
+    { "fraud_score": 0.65 }
+    Example: PUT http://localhost:5000/accounts/ACC-1001
+    """
+    data = request.get_json()
+
+    if not data or "fraud_score" not in data:
+        return jsonify({"error": "fraud_score dorkar"}), 400
+
+    fraud_score = float(data["fraud_score"])
+
+    conn = get_db_connection()
+    cursor = conn.execute(
+        "UPDATE accounts SET fraud_score = ? WHERE account_id = ?",
+        (fraud_score, account_id),
+    )
+    conn.commit()
+    updated_count = cursor.rowcount
+    conn.close()
+
+    if updated_count == 0:
+        return jsonify({"error": f"'{account_id}' pawa jay nai"}), 404
+
+    return jsonify({
+        "message": f"'{account_id}' update kora hoyeche",
+        "account_id": account_id,
+        "fraud_score": fraud_score,
+        "risk_level": get_risk_level(fraud_score),
+    })
+
+
 @app.route("/accounts/<account_id>", methods=["DELETE"])
 def delete_account(account_id):
     """
