@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
 import os
+import random
 
 app = Flask(__name__)
 CORS(app)  # eta na dile Flutter Web theke request block hoye jabe (CORS error)
@@ -171,6 +172,49 @@ def delete_account(account_id):
         return jsonify({"error": f"'{account_id}' pawa jay nai"}), 404
 
     return jsonify({"message": f"'{account_id}' delete kora hoyeche"})
+
+
+@app.route("/seed-demo-data", methods=["GET"])
+def seed_demo_data():
+    """
+    Ekta button/link diye 500 ta random demo account database e
+    add kora jay - eta test/demo purpose e onek data dekhanor jonne.
+    Browser e shudhu ei URL ta khulle e chole - kono POST lagbe na.
+    Example: GET https://your-backend-url.onrender.com/seed-demo-data
+    """
+    conn = get_db_connection()
+
+    # Koyta account already ache seta check kore, tar por theke notun ID shuru
+    cursor = conn.execute("SELECT COUNT(*) as cnt FROM accounts")
+    existing_count = cursor.fetchone()["cnt"]
+
+    new_accounts = []
+    start_number = 5000  # ACC-5000 theke shuru, jate age er account gulor shathe collision na hoy
+    for i in range(500):
+        account_id = f"ACC-{start_number + i}"
+        fraud_score = round(random.uniform(0.02, 0.98), 2)
+        new_accounts.append((account_id, fraud_score))
+
+    added_count = 0
+    for account_id, fraud_score in new_accounts:
+        try:
+            conn.execute(
+                "INSERT INTO accounts (account_id, fraud_score) VALUES (?, ?)",
+                (account_id, fraud_score),
+            )
+            added_count += 1
+        except sqlite3.IntegrityError:
+            continue  # already thakle skip kore dao
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "message": f"{added_count} ta notun demo account add kora hoyeche!",
+        "accounts_before": existing_count,
+        "accounts_added": added_count,
+        "accounts_now_total": existing_count + added_count,
+    })
 
 
 @app.route("/", methods=["GET"])
