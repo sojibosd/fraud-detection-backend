@@ -1,13 +1,17 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import os
 import random
 
 app = Flask(__name__)
 CORS(app)  # eta na dile Flutter Web theke request block hoye jabe (CORS error)
 
-DB_NAME = "fraud_detection.db"
+# Supabase (PostgreSQL) er connection string. Eta Render e Environment
+# Variable hishebe 'DATABASE_URL' naam e set kora thakbe - code er modhye
+# shorashori password likhte hoy na, eta beshi nirapod.
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 
 def get_risk_level(score):
@@ -19,25 +23,34 @@ def get_risk_level(score):
         return "LOW"
 
 
+def get_db_connection():
+    """
+    Supabase (PostgreSQL) database er shathe connection toiri kore.
+    cursor_factory die row gulo dict er moto (row['account_id']) access
+    kora jay, thik sqlite3.Row er moto e.
+    """
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    return conn
+
+
 def init_db():
     """
-    Ei function database file (fraud_detection.db) toiri kore
-    ebong 'accounts' table banay jodi age theke na thake.
+    'accounts' table toiri kore jodi age theke na thake. Table khali
+    thakle (prothom bar), kichu sample data dhukiye deya hoy.
     """
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS accounts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             account_id TEXT NOT NULL UNIQUE,
             fraud_score REAL NOT NULL
         )
     """)
     conn.commit()
 
-    # Table ta jodi khali thake (prothom bar run), tahole kichu sample data dhukiye dao
-    cursor.execute("SELECT COUNT(*) FROM accounts")
-    count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) as cnt FROM accounts")
+    count = cursor.fetchone()["cnt"]
 
     if count == 0:
         sample_data = [
@@ -51,19 +64,14 @@ def init_db():
             ("ACC-1008", 0.05),
         ]
         cursor.executemany(
-            "INSERT INTO accounts (account_id, fraud_score) VALUES (?, ?)",
+            "INSERT INTO accounts (account_id, fraud_score) VALUES (%s, %s)",
             sample_data,
         )
         conn.commit()
         print(f"[INFO] {len(sample_data)} ta sample account database e add kora holo.")
 
+    cursor.close()
     conn.close()
-
-
-def get_db_connection():
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row  # eta dile row gulo dict er moto access kora jabe
-    return conn
 
 
 @app.route("/accounts", methods=["GET"])
@@ -72,7 +80,10 @@ def get_accounts():
     Shob account database theke niye JSON banaye pathay.
     """
     conn = get_db_connection()
-    rows = conn.execute("SELECT account_id, fraud_score FROM accounts").fetchall()
+    cursor = conn.cursor()
+    cursor.execute("SELECT account_id, fraud_score FROM accounts")
+    rows = cursor.fetchall()
+    cursor.close()
     conn.close()
 
     accounts = []
@@ -102,16 +113,20 @@ def add_account():
     fraud_score = float(data["fraud_score"])
 
     conn = get_db_connection()
+    cursor = conn.cursor()
     try:
-        conn.execute(
-            "INSERT INTO accounts (account_id, fraud_score) VALUES (?, ?)",
+        cursor.execute(
+            "INSERT INTO accounts (account_id, fraud_score) VALUES (%s, %s)",
             (account_id, fraud_score),
         )
         conn.commit()
-    except sqlite3.IntegrityError:
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        cursor.close()
         conn.close()
         return jsonify({"error": f"'{account_id}' age theke ache"}), 409
 
+    cursor.close()
     conn.close()
     return jsonify({
         "message": "Account jog kora hoyeche",
@@ -127,7 +142,6 @@ def update_account(account_id):
     Ekta existing account er fraud score update korar jonne.
     Body te ei rokom JSON pathate hobe:
     { "fraud_score": 0.65 }
-    Example: PUT http://localhost:5000/accounts/ACC-1001
     """
     data = request.get_json()
 
@@ -137,12 +151,14 @@ def update_account(account_id):
     fraud_score = float(data["fraud_score"])
 
     conn = get_db_connection()
-    cursor = conn.execute(
-        "UPDATE accounts SET fraud_score = ? WHERE account_id = ?",
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE accounts SET fraud_score = %s WHERE account_id = %s",
         (fraud_score, account_id),
     )
     conn.commit()
     updated_count = cursor.rowcount
+    cursor.close()
     conn.close()
 
     if updated_count == 0:
@@ -160,12 +176,13 @@ def update_account(account_id):
 def delete_account(account_id):
     """
     Kono account delete korar jonne (URL e account_id disi).
-    Example: DELETE http://localhost:5000/accounts/ACC-1001
     """
     conn = get_db_connection()
-    cursor = conn.execute("DELETE FROM accounts WHERE account_id = ?", (account_id,))
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM accounts WHERE account_id = %s", (account_id,))
     conn.commit()
     deleted_count = cursor.rowcount
+    cursor.close()
     conn.close()
 
     if deleted_count == 0:
@@ -177,15 +194,14 @@ def delete_account(account_id):
 @app.route("/seed-demo-data", methods=["GET"])
 def seed_demo_data():
     """
-    Ekta button/link diye 500 ta random demo account database e
-    add kora jay - eta test/demo purpose e onek data dekhanor jonne.
-    Browser e shudhu ei URL ta khulle e chole - kono POST lagbe na.
-    Example: GET https://your-backend-url.onrender.com/seed-demo-data
+    500 ta random demo account database e add kore. 'ON CONFLICT DO
+    NOTHING' die, age theke thaka account_id gulo automatic skip hoye
+    jay - kono error hoy na.
     """
     conn = get_db_connection()
+    cursor = conn.cursor()
 
-    # Koyta account already ache seta check kore, tar por theke notun ID shuru
-    cursor = conn.execute("SELECT COUNT(*) as cnt FROM accounts")
+    cursor.execute("SELECT COUNT(*) as cnt FROM accounts")
     existing_count = cursor.fetchone()["cnt"]
 
     new_accounts = []
@@ -195,40 +211,39 @@ def seed_demo_data():
         fraud_score = round(random.uniform(0.02, 0.98), 2)
         new_accounts.append((account_id, fraud_score))
 
-    added_count = 0
-    for account_id, fraud_score in new_accounts:
-        try:
-            conn.execute(
-                "INSERT INTO accounts (account_id, fraud_score) VALUES (?, ?)",
-                (account_id, fraud_score),
-            )
-            added_count += 1
-        except sqlite3.IntegrityError:
-            continue  # already thakle skip kore dao
-
+    cursor.executemany(
+        "INSERT INTO accounts (account_id, fraud_score) VALUES (%s, %s) ON CONFLICT (account_id) DO NOTHING",
+        new_accounts,
+    )
     conn.commit()
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM accounts")
+    new_total = cursor.fetchone()["cnt"]
+    added_count = new_total - existing_count
+
+    cursor.close()
     conn.close()
 
     return jsonify({
         "message": f"{added_count} ta notun demo account add kora hoyeche!",
         "accounts_before": existing_count,
         "accounts_added": added_count,
-        "accounts_now_total": existing_count + added_count,
+        "accounts_now_total": new_total,
     })
 
 
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify({"message": "Fraud Detection API is running (SQLite database use hocche). Try /accounts"})
+    return jsonify({
+        "message": "Fraud Detection API is running (PostgreSQL/Supabase - sthayi database!). Try /accounts"
+    })
 
 
 # init_db() ke module level e call kora hocche, jate 'python app.py' die
 # local e chalale, ebong 'gunicorn app:app' die deploy kore chalale -
-# dutokhetreই database toiri hoy. Age eta shudhu __main__ block e chilo,
-# tai gunicorn e run korle eta kokhono call hoto na.
+# dutokhetreই database toiri hoy.
 init_db()
 
 if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 5000))  # Render/hosting service PORT env var use kore
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
