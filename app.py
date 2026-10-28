@@ -164,9 +164,9 @@ def update_account(account_id):
     data = request.get_json()
 
     if not data or "fraud_score" not in data:
-        return jsonify({"error": "fraud_score dorkar"}), 400
+    return jsonify({"error": "fraud_score dorkar"}), 400
 
-    fraud_score = float(data["fraud_score"])
+fraud_score = float(data["fraud_score"])
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -180,7 +180,7 @@ def update_account(account_id):
     conn.close()
 
     if updated_count == 0:
-        return jsonify({"error": f"'{account_id}' pawa jay nai"}), 404
+    return jsonify({"error": f"'{account_id}' pawa jay nai"}), 404
 
     return jsonify({
         "message": f"'{account_id}' update kora hoyeche",
@@ -201,7 +201,7 @@ def delete_account(account_id):
     conn.close()
 
     if deleted_count == 0:
-        return jsonify({"error": f"'{account_id}' pawa jay nai"}), 404
+    return jsonify({"error": f"'{account_id}' pawa jay nai"}), 404
 
     return jsonify({"message": f"'{account_id}' delete kora hoyeche"})
 
@@ -238,13 +238,13 @@ def add_transaction():
     data = request.get_json()
 
     if not data or "account_id" not in data or "amount" not in data:
-        return jsonify({"error": "account_id o amount dorkar"}), 400
+    return jsonify({"error": "account_id o amount dorkar"}), 400
 
     account_id = data["account_id"]
     amount = float(data["amount"])
 
     if amount <= 0:
-        return jsonify({"error": "amount 0 er beshi hote hobe"}), 400
+    return jsonify({"error": "amount 0 er beshi hote hobe"}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -256,7 +256,7 @@ def add_transaction():
         conn.close()
         return jsonify({"error": f"'{account_id}' account pawa jay nai"}), 404
 
-       fraud_score = ml_fraud_score(amount, account["fraud_score"])
+    fraud_score = ml_fraud_score(amount, account["fraud_score"])
     risk_level = get_risk_level(fraud_score)
 
     txn_id = f"TXN-{random.randint(100000, 999999)}"
@@ -287,7 +287,7 @@ def add_transaction():
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({
-        "message": "Fraud Detection API is running. Try /accounts or /transactions"
+    "message": "Fraud Detection API is running. Try /accounts or /transactions"
     })
 
 
