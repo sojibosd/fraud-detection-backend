@@ -254,7 +254,8 @@ def add_transaction():
     if not account:
         cursor.close()
         conn.close()
-        return jsonify({"error": f"'{account_id}' account pawa jay nai"}), 404
+        return jsonify({"error": f"'{account_id}' account pawa jay
+        nai"}), 404
 
     fraud_score = ml_fraud_score(amount, account["fraud_score"])
     risk_level = get_risk_level(fraud_score)
