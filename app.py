@@ -1,3 +1,33 @@
+import math
+from datetime import datetime
+
+# Logistic Regression model er weights
+# (synthetic fraud data diye train kora model theke)
+ML_WEIGHTS = {
+    "amount": 0.000012,
+    "account_score": 2.5,
+    "night_time": 0.8,
+    "intercept": -1.2,
+}
+
+def ml_fraud_score(amount, account_score):
+    """
+    Logistic Regression model:
+    P(fraud) = sigmoid(w1*amount + w2*account_score + w3*night + b)
+    """
+    hour = datetime.now().hour
+    night_time = 1 if (hour >= 22 or hour <= 5) else 0
+
+    z = (
+        ML_WEIGHTS["amount"] * amount
+        + ML_WEIGHTS["account_score"] * account_score
+        + ML_WEIGHTS["night_time"] * night_time
+        + ML_WEIGHTS["intercept"]
+    )
+
+    # Sigmoid function: 0 theke 1 er moddhe probability dey
+    probability = 1 / (1 + math.exp(-z))
+    return round(probability, 2)
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import psycopg2
@@ -226,9 +256,7 @@ def add_transaction():
         conn.close()
         return jsonify({"error": f"'{account_id}' account pawa jay nai"}), 404
 
-    base_score = min(amount / 100000, 0.6)
-    account_score = account["fraud_score"] * 0.4
-    fraud_score = round(min(base_score + account_score, 0.99), 2)
+       fraud_score = ml_fraud_score(amount, account["fraud_score"])
     risk_level = get_risk_level(fraud_score)
 
     txn_id = f"TXN-{random.randint(100000, 999999)}"
