@@ -238,13 +238,13 @@ def add_transaction():
     data = request.get_json()
 
     if not data or "account_id" not in data or "amount" not in data:
-    return jsonify({"error": "account_id o amount dorkar"}), 400
+        return jsonify({"error": "account_id o amount dorkar"}), 400
 
     account_id = data["account_id"]
     amount = float(data["amount"])
 
     if amount <= 0:
-    return jsonify({"error": "amount 0 er beshi hote hobe"}), 400
+        return jsonify({"error": "amount 0 er beshi hote hobe"}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -254,8 +254,7 @@ def add_transaction():
     if not account:
         cursor.close()
         conn.close()
-        return jsonify({"error": f"'{account_id}' account pawa jay
-        nai"}), 404
+        return jsonify({"error": f"'{account_id}' account pawa jay nai"}), 404
 
     fraud_score = ml_fraud_score(amount, account["fraud_score"])
     risk_level = get_risk_level(fraud_score)
