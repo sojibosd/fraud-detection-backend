@@ -1,8 +1,17 @@
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+import psycopg2
+import psycopg2.extras
+import os
+import random
 import math
 from datetime import datetime
 
-# Logistic Regression model er weights
-# (synthetic fraud data diye train kora model theke)
+app = Flask(__name__)
+CORS(app)
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
 ML_WEIGHTS = {
     "amount": 0.000012,
     "account_score": 2.5,
@@ -10,11 +19,17 @@ ML_WEIGHTS = {
     "intercept": -1.2,
 }
 
+
+def get_risk_level(score):
+    if score >= 0.7:
+        return "HIGH"
+    elif score >= 0.4:
+        return "MEDIUM"
+    else:
+        return "LOW"
+
+
 def ml_fraud_score(amount, account_score):
-    """
-    Logistic Regression model:
-    P(fraud) = sigmoid(w1*amount + w2*account_score + w3*night + b)
-    """
     hour = datetime.now().hour
     night_time = 1 if (hour >= 22 or hour <= 5) else 0
 
@@ -25,29 +40,8 @@ def ml_fraud_score(amount, account_score):
         + ML_WEIGHTS["intercept"]
     )
 
-    # Sigmoid function: 0 theke 1 er moddhe probability dey
     probability = 1 / (1 + math.exp(-z))
     return round(probability, 2)
-from flask import Flask, jsonify, request
-from flask_cors import CORS
-import psycopg2
-import psycopg2.extras
-import os
-import random
-
-app = Flask(__name__)
-CORS(app)
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
-
-
-def get_risk_level(score):
-    if score >= 0.7:
-        return "HIGH"
-    elif score >= 0.4:
-        return "MEDIUM"
-    else:
-        return "LOW"
 
 
 def get_db_connection():
@@ -164,9 +158,9 @@ def update_account(account_id):
     data = request.get_json()
 
     if not data or "fraud_score" not in data:
-    return jsonify({"error": "fraud_score dorkar"}), 400
+        return jsonify({"error": "fraud_score dorkar"}), 400
 
-fraud_score = float(data["fraud_score"])
+    fraud_score = float(data["fraud_score"])
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -180,7 +174,7 @@ fraud_score = float(data["fraud_score"])
     conn.close()
 
     if updated_count == 0:
-    return jsonify({"error": f"'{account_id}' pawa jay nai"}), 404
+        return jsonify({"error": f"'{account_id}' pawa jay nai"}), 404
 
     return jsonify({
         "message": f"'{account_id}' update kora hoyeche",
@@ -201,7 +195,7 @@ def delete_account(account_id):
     conn.close()
 
     if deleted_count == 0:
-    return jsonify({"error": f"'{account_id}' pawa jay nai"}), 404
+        return jsonify({"error": f"'{account_id}' pawa jay nai"}), 404
 
     return jsonify({"message": f"'{account_id}' delete kora hoyeche"})
 
@@ -287,7 +281,7 @@ def add_transaction():
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({
-    "message": "Fraud Detection API is running. Try /accounts or /transactions"
+        "message": "Fraud Detection API is running. Try /accounts or /transactions"
     })
 
 
